@@ -1,0 +1,15 @@
+# Binaries (downloaded at runtime)
+bin/
+
+# Data directories
+data/
+logs/
+
+# Python
+services/*/venv/
+*.pyc
+__pycache__/
+
+# OS files
+.DS_Store
+*.pid
