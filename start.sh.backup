@@ -19,10 +19,11 @@ nohup ./bin/prometheus \
     > logs/prometheus.log 2>&1 &
 echo $! > logs/prometheus.pid
 
-# Start Grafana with proper config
+# Start Grafana
 echo "Starting Grafana..."
 nohup ./bin/grafana-server \
-    --config=config/grafana/grafana.ini \
+    --homepath=. \
+    --config=config/grafana/provisioning/datasources/datasources.yml \
     > logs/grafana.log 2>&1 &
 echo $! > logs/grafana.pid
 
