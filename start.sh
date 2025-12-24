@@ -1,16 +1,40 @@
 #!/bin/bash
 
-echo "🚀 Starting Monitoring Stack..."
+echo "Starting Monitoring Stack..."
 
-# Check if binaries exist
+# Check if core binaries exist
 if [ ! -f "bin/prometheus" ]; then
-    echo "⚠️  Binaries not found. Running install..."
+    echo "⚠️  Core binaries not found. Running install..."
     ./install-binaries.sh
 fi
 
-mkdir -p logs data/prometheus data/grafana
+# Check ELK binaries
+if [ ! -d "bin/elasticsearch" ] || [ ! -d "bin/kibana" ] || [ ! -d "bin/filebeat" ]; then
+    echo "⚠️  Elasticsearch/Kibana/Filebeat not found in ./bin."
+    echo "    Make sure you installed them into ./bin before running start.sh"
+    echo "    (Elasticsearch + Kibana arm64, Filebeat amd64 via Rosetta)"
+    exit 1
+fi
 
-# Start Prometheus
+mkdir -p logs data/prometheus data/grafana data/alertmanager data/elasticsearch
+
+# --- Elasticsearch ---
+echo "Starting Elasticsearch..."
+export ES_JAVA_HOME=$(/usr/libexec/java_home -v 11)
+export ES_PATH_CONF="$(pwd)/config/elasticsearch"
+
+nohup ./bin/elasticsearch/bin/elasticsearch \
+    > logs/elasticsearch.log 2>&1 &
+echo $! > logs/elasticsearch.pid
+
+# --- Kibana ---
+echo "Starting Kibana..."
+nohup ./bin/kibana/bin/kibana \
+    --config "$(pwd)/config/kibana/kibana.yml" \
+    > logs/kibana.log 2>&1 &
+echo $! > logs/kibana.pid
+
+# --- Prometheus ---
 echo "Starting Prometheus..."
 nohup ./bin/prometheus \
     --config.file=config/prometheus/prometheus.yml \
@@ -19,14 +43,14 @@ nohup ./bin/prometheus \
     > logs/prometheus.log 2>&1 &
 echo $! > logs/prometheus.pid
 
-# Start Grafana with proper config
+# --- Grafana ---
 echo "Starting Grafana..."
 nohup ./bin/grafana-server \
     --config=config/grafana/grafana.ini \
     > logs/grafana.log 2>&1 &
 echo $! > logs/grafana.pid
 
-# Start AlertManager
+# --- AlertManager ---
 echo "Starting AlertManager..."
 nohup ./bin/alertmanager \
     --config.file=config/alertmanager/alertmanager.yml \
@@ -34,7 +58,7 @@ nohup ./bin/alertmanager \
     > logs/alertmanager.log 2>&1 &
 echo $! > logs/alertmanager.pid
 
-# Start User Service
+# --- User Service ---
 echo "Starting User Service..."
 cd services/user-service
 source venv/bin/activate
@@ -43,14 +67,25 @@ echo $! > ../../logs/user-service.pid
 deactivate
 cd ../..
 
+# --- Filebeat (amd64, requires Rosetta on Apple Silicon) ---
+echo "Starting Filebeat..."
+nohup arch -x86_64 ./bin/filebeat/filebeat \
+    -c "$(pwd)/config/filebeat/filebeat.yml" \
+    -e \
+    > logs/filebeat.log 2>&1 &
+echo $! > logs/filebeat.pid
+
 sleep 3
 echo ""
 echo "✅ Services started!"
 echo ""
 echo "🌐 Access:"
-echo "  • Prometheus:  http://localhost:9090"
-echo "  • Grafana:     http://localhost:3000 (admin/admin)"
+echo "  • Prometheus:   http://localhost:9090"
+echo "  • Grafana:      http://localhost:3000 (admin/admin)"
+echo "  • AlertManager: http://localhost:9093"
 echo "  • User Service: http://localhost:8081"
+echo "  • Elasticsearch: http://localhost:9200"
+echo "  • Kibana:       http://localhost:5601"
 echo ""
 echo "📊 Check: ./status.sh"
 echo "🛑 Stop:  ./stop.sh"
