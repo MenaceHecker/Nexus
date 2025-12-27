@@ -1,0 +1,54 @@
+groups:
+  - name: nexus-user-service-sli
+    interval: 15s
+    rules:
+      # --- Request rate (RPS) ---
+      - record: nexus:http_rps:5m
+        expr: sum(rate(http_requests_total[5m]))
+
+      # --- Error rate (5xx / all) ---
+      # NOTE: metric label is sometimes "status" OR "code".
+      # Use ONE of the two expressions below (comment out the other).
+      - record: nexus:http_error_ratio:5m
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          )
+
+      # If your metric uses code= instead of status=
+      # - record: nexus:http_error_ratio:5m
+      #   expr: |
+      #     (
+      #       sum(rate(http_requests_total{code=~"5.."}[5m]))
+      #       /
+      #       sum(rate(http_requests_total[5m]))
+      #     )
+
+      # --- Availability SLI (success / total) ---
+      # success = NOT 5xx
+      - record: nexus:http_availability:5m
+        expr: |
+          (
+            sum(rate(http_requests_total{status!~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          )
+
+      # If your metric uses code= instead of status=
+      # - record: nexus:http_availability:5m
+      #   expr: |
+      #     (
+      #       sum(rate(http_requests_total{code!~"5.."}[5m]))
+      #       /
+      #       sum(rate(http_requests_total[5m]))
+      #     )
+
+      # --- Latency P95 SLI (seconds) ---
+      - record: nexus:http_latency_p95_seconds:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
