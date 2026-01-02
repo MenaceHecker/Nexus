@@ -6,6 +6,7 @@ import logging
 import json
 import os
 
+## Microservice: User Service
 # JSON logging
 class JsonFormatter(logging.Formatter):
     def format(self, record):
