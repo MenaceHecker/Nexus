@@ -1,0 +1,57 @@
+groups:
+  - name: nexus-user-service-slo
+    interval: 15s
+    rules:
+      # ---- SLO targets (tune these later, but start realistic) ----
+      # Availability SLO: 99.9% over 30d (conceptually)
+      - record: nexus:slo_availability_target
+        expr: 0.999
+
+      # Latency SLO: P95 < 0.5s
+      - record: nexus:slo_latency_p95_target_seconds
+        expr: 0.5
+
+      # ---- Error budget consumption (instant / short-window signal) ----
+      # Error budget burn ratio (relative to allowed errors)
+      # If SLO=99.9%, allowed error fraction = 0.001.
+      - record: nexus:error_budget_burn_rate:5m
+        expr: |
+          (
+            1 - nexus:http_availability:5m
+          )
+          /
+          (1 - nexus:slo_availability_target)
+
+      # ---- Alerts (burn-rate style) ----
+      # Fast burn: you're burning budget too quickly right now
+      - alert: NexusErrorBudgetBurningFast
+        expr: nexus:error_budget_burn_rate:5m > 10
+        for: 5m
+        labels:
+          severity: critical
+          stack: nexus
+        annotations:
+          summary: "Error budget burning FAST (5m burn rate > 10x)"
+          description: "Availability is violating SLO at a high rate. Investigate 5xx spikes, downstream failures, or deploy regressions."
+
+      # Slow burn: not an emergency, but will eat your budget over time
+      - alert: NexusErrorBudgetBurningSlow
+        expr: nexus:error_budget_burn_rate:5m > 2
+        for: 30m
+        labels:
+          severity: warning
+          stack: nexus
+        annotations:
+          summary: "Error budget burning SLOW (5m burn rate > 2x)"
+          description: "Sustained elevated error rate. Investigate chronic issues before SLO impact accumulates."
+
+      # Latency SLO violation (P95 over window)
+      - alert: NexusLatencySLOViolated
+        expr: nexus:http_latency_p95_seconds:5m > nexus:slo_latency_p95_target_seconds
+        for: 10m
+        labels:
+          severity: warning
+          stack: nexus
+        annotations:
+          summary: "Latency SLO violated (P95 > target)"
+          description: "P95 latency is above target. Check DB saturation, slow queries, lock contention, or traffic spikes."
